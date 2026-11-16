@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>STAI-6 session recorder</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{--ink:#1b2a3a;--muted:#5b6b7a;--sea:#17766d;--sea-d:#0f5a53;--sea-l:#e1f2ef;--mist:#edf3f6;--line:#d3dee6}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{font-family:Manrope,system-ui,sans-serif;color:var(--ink);background:var(--mist);min-height:100dvh;line-height:1.5}
+.bar{display:flex;justify-content:space-between;align-items:center;gap:12px;max-width:780px;margin:0 auto;padding:16px 20px}
+.brand{font-weight:800;font-size:1.05rem}
+main{max-width:780px;margin:0 auto;padding:4px 20px 48px}
+.card{background:#fff;border:1px solid var(--line);border-radius:20px;padding:32px;box-shadow:0 1px 2px rgba(27,42,58,.05)}
+h1{font-size:1.9rem;line-height:1.2;margin:0 0 8px;font-weight:800}
+.lead{color:var(--muted);margin:0 0 24px}
+label{display:block;font-weight:600;margin-bottom:16px}
+input,select{display:block;width:100%;margin-top:6px;padding:12px 14px;font:inherit;border:1.5px solid var(--line);border-radius:12px;background:#fff;color:var(--ink)}
+input:focus,select:focus,button:focus-visible{outline:3px solid #7cc4bb;outline-offset:2px}
+button{font:inherit;cursor:pointer}
+.primary{background:var(--sea);color:#fff;border:0;border-radius:12px;padding:14px 24px;font-weight:700;font-size:1rem}
+.primary:hover{background:var(--sea-d)}
+.primary:disabled{background:#a9c9c5;cursor:not-allowed}
+.secondary,.ghost{background:#fff;color:var(--ink);border:1.5px solid var(--line);border-radius:12px;padding:14px 22px;font-weight:600}
+.ghost{padding:8px 14px;font-size:.9rem}
+.secondary:disabled{opacity:.4;cursor:not-allowed}
+.prog{display:flex;gap:6px;margin-bottom:24px}
+.prog i{flex:1;height:6px;border-radius:3px;background:var(--line)}
+.prog i.on{background:var(--sea)}
+.meta{display:flex;justify-content:space-between;gap:12px;color:var(--muted);font-weight:600;font-size:.95rem}
+.stmt{font-size:clamp(2rem,6vw,3rem);font-weight:800;line-height:1.15;margin:10px 0 6px}
+.ask{color:var(--muted);margin:0 0 28px}
+.tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.tile{background:#fff;color:var(--ink);border:2px solid var(--line);border-radius:16px;padding:22px 8px;display:flex;flex-direction:column;align-items:center;gap:6px;transition:transform .1s,background .15s,border-color .15s}
+.tile .num{font-size:2.8rem;font-weight:800;line-height:1}
+.tile .lab{font-weight:600;color:var(--muted)}
+.tile:hover{border-color:var(--sea)}
+.tile:active{transform:scale(.97)}
+.tile.on{background:var(--sea);border-color:var(--sea);color:#fff}
+.tile.on .lab{color:#e6f6f3}
+.nav{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:28px}
+.hint,.note{color:var(--muted);font-size:.875rem;margin:18px 0 0}
+.saved{display:inline-block;background:var(--sea-l);color:var(--sea-d);font-weight:700;border-radius:999px;padding:4px 14px;margin-bottom:14px}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:20px 0}
+.score{background:var(--sea-l);border-radius:16px;padding:18px;text-align:center}
+.score b{display:block;font-size:2.6rem;line-height:1.1}
+.score span,.stat span{color:var(--muted);font-weight:600;font-size:.9rem}
+.stat{border:1.5px solid var(--line);border-radius:14px;padding:14px}
+.stat b{display:block;font-size:1.5rem}
+.row{display:flex;flex-wrap:wrap;gap:12px;margin-top:24px}
+@media(max-width:560px){.tiles{grid-template-columns:repeat(2,1fr)}.card{padding:22px}.grid3{grid-template-columns:1fr}}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<header class="bar">
+  <div class="brand">STAI-6 session recorder</div>
+  <button class="ghost" id="dl">Download Excel</button>
+</header>
+<main id="app"></main>
+
+<script>
+/* ========== 1. SETTINGS (edit these) ========== */
+// Paste your Google Apps Script web-app URL between the quotes (see steps). Leave "" to save on this device only.
+const SHEET_URL = "https://script.google.com/macros/s/AKfycbxPmYTvpuG3J0-khKRyWjH7bwKT5KTQyZpyZjU46njsPibXuI48SSN6RNnkAr2QFa0f/exec";
+const GROUPS   = ["A - Music", "B - Control"];
+const SESSIONS = ["Week 0 (baseline)", "Week 1", "Week 2","Week 3","Week 4(Follow-up)","Other"];
+
+/* ========== 2. STAI-6 CONTENT ========== */
+// rev = positive item, reverse scored (1=4, 2=3, 3=2, 4=1)
+const ITEMS = [
+  {t:"I feel calm",    k:"calm",    rev:true},
+  {t:"I am tense",     k:"tense",   rev:false},
+  {t:"I feel upset",   k:"upset",   rev:false},
+  {t:"I am relaxed",   k:"relaxed", rev:true},
+  {t:"I feel content", k:"content", rev:true},
+  {t:"I am worried",   k:"worried", rev:false}
+];
+const LABELS = ["Not at all", "Somewhat", "Moderately", "Very much"];
+const POINTS = [
+  {key:"STAI1", name:"STAI 1", when:"Baseline rest"},
+  {key:"STAI2", name:"STAI 2", when:"After stress task"},
+  {key:"STAI3", name:"STAI 3", when:"After recovery"}
+];
+
+/* ========== 3. HELPERS ========== */
+const $ = id => document.getElementById(id);
+const $app = $("app");
+const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const stamp = () => new Date().toLocaleString("sv-SE"); // 2026-11-16 14:03:22
+const KEY_R = "stai6_responses", KEY_S = "stai6_summary";
+const load = k => { try { return JSON.parse(localStorage.getItem(k)) || []; } catch { return []; } };
+const keep = (k, obj) => { try { const a = load(k); a.push(obj); localStorage.setItem(k, JSON.stringify(a)); } catch {} };
+const opts = (list, cur) => list.map(o => `<option${o === cur ? " selected" : ""}>${esc(o)}</option>`).join("");
+
+// STAI-6 scoring: reverse positive items, sum, multiply by 20/6 (range 20-80)
+function score(ans) {
+  const sum = ans.reduce((a, v, i) => a + (ITEMS[i].rev ? 5 - v : v), 0);
+  return {sum, total: Math.round(sum * 20 / 6 * 100) / 100};
+}
+
+// Send one row to Google Sheets (no-cors: we can't read the reply, so check the sheet after a test run)
+function send(type, obj) {
+  if (!SHEET_URL) return;
+  fetch(SHEET_URL, {
+    method: "POST", mode: "no-cors",
+    headers: {"Content-Type": "text/plain;charset=utf-8"},
+    body: JSON.stringify({type, headers: Object.keys(obj), values: Object.values(obj)})
+  }).catch(() => {});
+}
+
+function downloadXlsx() {
+  if (typeof XLSX === "undefined") return alert("The Excel library did not load. Check the internet connection and refresh.");
+  const r = load(KEY_R), s = load(KEY_S);
+  if (!r.length) return alert("Nothing saved on this device yet. Finish at least one STAI first.");
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(r), "STAI_Responses");
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(s), "Session_Summary");
+  XLSX.writeFile(wb, `STAI6_data_${new Date().toISOString().slice(0, 10)}.xlsx`);
+}
+$("dl").onclick = downloadXlsx;
+
+/* ========== 4. STATE ========== */
+const fresh = (g = GROUPS[0], s = SESSIONS[0]) => ({screen:"setup", pid:"", group:g, session:s, t:0, q:0, ans:Array(6).fill(null), rows:[], summary:null, timer:null});
+let S = fresh();
+
+/* ========== 5. SCREENS ========== */
+function viewSetup() {
+  S.screen = "setup";
+  $app.innerHTML = `
+  <section class="card">
+    <h1>New participant</h1>
+    <p class="lead">Each session has three STAI-6 check-ins: baseline, after the stress task, and after recovery.</p>
+    <form id="f">
+      <label>Participant ID<input id="pid" required autocomplete="off" placeholder="e.g. P001" value="${esc(S.pid)}"></label>
+      <label>Group<select id="grp">${opts(GROUPS, S.group)}</select></label>
+      <label>Session<select id="ses">${opts(SESSIONS, S.session)}</select></label>
+      <button class="primary" type="submit">Start STAI 1</button>
+    </form>
+    <p class="note">${SHEET_URL ? "Answers sync to your Google Sheet and are backed up on this device." : "No Google Sheet linked yet. Answers are saved on this device; use Download Excel."}</p>
+  </section>`;
+  $("pid").focus();
+  $("f").onsubmit = e => {
+    e.preventDefault();
+    S = fresh($("grp").value, $("ses").value);
+    S.pid = $("pid").value.trim();
+    viewIntro();
+  };
+}
+
+function viewIntro() {
+  S.screen = "intro"; S.q = 0; S.ans = Array(6).fill(null);
+  const P = POINTS[S.t];
+  $app.innerHTML = `
+  <section class="card">
+    ${S.t > 0 ? `<div class="saved">${POINTS[S.t - 1].name} saved</div>` : ""}
+    <h1>${P.name} of 3: ${P.when}</h1>
+    <p class="lead">Participant ${esc(S.pid)}. Answer for how you feel right now, at this moment. There are no right or wrong answers, so go with your first instinct.</p>
+    <button class="primary" id="go">Begin ${P.name}</button>
+  </section>`;
+  $("go").onclick = viewQuestion; $("go").focus();
+}
+
+function viewQuestion() {
+  S.screen = "question";
+  const P = POINTS[S.t], it = ITEMS[S.q], cur = S.ans[S.q], last = S.q === 5;
+  $app.innerHTML = `
+  <section class="card">
+    <div class="prog">${ITEMS.map((_, i) => `<i class="${i <= S.q ? "on" : ""}"></i>`).join("")}</div>
+    <div class="meta"><span>${P.name} of 3: ${P.when}</span><span>Question ${S.q + 1} of 6</span></div>
+    <h2 class="stmt">${it.t}</h2>
+    <p class="ask">How much does this describe you right now, at this moment?</p>
+    <div class="tiles">${LABELS.map((l, i) => `
+      <button class="tile${cur === i + 1 ? " on" : ""}" data-v="${i + 1}" aria-pressed="${cur === i + 1}">
+        <span class="num">${i + 1}</span><span class="lab">${l}</span>
+      </button>`).join("")}
+    </div>
+    <div class="nav">
+      <button class="secondary" id="back" ${S.q === 0 ? "disabled" : ""}>Back</button>
+      <button class="primary" id="next" ${cur ? "" : "disabled"}>${last ? "Save " + P.name : "Next"}</button>
+    </div>
+    <p class="hint">Press 1 to 4 to answer, Enter to continue, left arrow to go back.</p>
+  </section>`;
+  $app.querySelectorAll(".tile").forEach(b => b.onclick = () => choose(+b.dataset.v));
+  $("back").onclick = back; $("next").onclick = advance;
+}
+
+function choose(v) {
+  clearTimeout(S.timer);
+  S.ans[S.q] = v;
+  const at = S.q;
+  viewQuestion();
+  if (at < 5) S.timer = setTimeout(() => { if (S.screen === "question" && S.q === at) { S.q++; viewQuestion(); } }, 280);
+}
+function back() { clearTimeout(S.timer); if (S.q > 0) { S.q--; viewQuestion(); } }
+function advance() {
+  clearTimeout(S.timer);
+  if (!S.ans[S.q]) return;
+  if (S.q < 5) { S.q++; viewQuestion(); } else submitPoint();
+}
+
+function submitPoint() {
+  const P = POINTS[S.t], {sum, total} = score(S.ans);
+  const row = {Timestamp: stamp(), Participant_ID: S.pid, Group: S.group, Session: S.session, Timepoint: P.key};
+  ITEMS.forEach((it, i) => row[`Q${i + 1}_${it.k}`] = S.ans[i]);
+  row.Sum_reverse_scored = sum;
+  row.STAI_Total = total;
+  S.rows.push(row); keep(KEY_R, row); send("response", row);
+  if (S.t < 2) { S.t++; viewIntro(); } else finish();
+}
+
+function finish() {
+  const [a, b, c] = S.rows.map(r => r.STAI_Total);
+  const d = b - a;
+  const sm = {
+    Timestamp: stamp(), Participant_ID: S.pid, Group: S.group, Session: S.session,
+    STAI1_Total: a, STAI2_Total: b, STAI3_Total: c,
+    Reactivity_STAI2_minus_STAI1: +(b - a).toFixed(2),
+    Recovery_Score_STAI2_minus_STAI3: +(b - c).toFixed(2),
+    Recovery_Percent: d === 0 ? "" : +(((b - c) / d) * 100).toFixed(1)
+  };
+  keep(KEY_S, sm); send("summary", sm); S.summary = sm;
+  viewSummary();
+}
+
+function viewSummary() {
+  S.screen = "summary";
+  const m = S.summary;
+  $app.innerHTML = `
+  <section class="card">
+    <h1>Session complete</h1>
+    <p class="lead">Participant ${esc(m.Participant_ID)}, ${esc(m.Group)}, ${esc(m.Session)}. STAI-6 scores run from 20 to 80; about 34 to 36 is typical.</p>
+    <div class="grid3">
+      <div class="score"><b>${m.STAI1_Total}</b><span>STAI 1: baseline</span></div>
+      <div class="score"><b>${m.STAI2_Total}</b><span>STAI 2: after stress</span></div>
+      <div class="score"><b>${m.STAI3_Total}</b><span>STAI 3: after recovery</span></div>
+    </div>
+    <div class="grid3">
+      <div class="stat"><b>${m.Reactivity_STAI2_minus_STAI1}</b><span>Reactivity (STAI 2 minus 1)</span></div>
+      <div class="stat"><b>${m.Recovery_Score_STAI2_minus_STAI3}</b><span>Recovery score (STAI 2 minus 3)</span></div>
+      <div class="stat"><b>${m.Recovery_Percent === "" ? "n/a" : m.Recovery_Percent + "%"}</b><span>Recovery percent</span></div>
+    </div>
+    <div class="row">
+      <button class="primary" id="next-p">Next participant</button>
+      <button class="secondary" id="dl2">Download Excel</button>
+    </div>
+  </section>`;
+  $("next-p").onclick = () => { S = fresh(S.group, S.session); viewSetup(); };
+  $("dl2").onclick = downloadXlsx;
+}
+
+/* ========== 6. KEYBOARD ========== */
+document.addEventListener("keydown", e => {
+  if (S.screen !== "question" || e.repeat) return;
+  if (["1", "2", "3", "4"].includes(e.key)) choose(+e.key);
+  else if (e.key === "Enter") { e.preventDefault(); advance(); }
+  else if (e.key === "ArrowLeft" || e.key === "Backspace") back();
+});
+
+viewSetup();
+</script>
+</body>
+</html>
