@@ -28,6 +28,8 @@ button{font:inherit;cursor:pointer}
 .primary:disabled{background:#a9c9c5;cursor:not-allowed}
 .secondary,.ghost{background:#fff;color:var(--ink);border:1.5px solid var(--line);border-radius:12px;padding:14px 22px;font-weight:600}
 .ghost{padding:8px 14px;font-size:.9rem}
+.tools{display:flex;gap:8px}
+.err{color:#b3261e;font-weight:600;margin:0 0 16px}
 .secondary:disabled{opacity:.4;cursor:not-allowed}
 .prog{display:flex;gap:6px;margin-bottom:24px}
 .prog i{flex:1;height:6px;border-radius:3px;background:var(--line)}
@@ -60,16 +62,20 @@ button{font:inherit;cursor:pointer}
 <body>
 <header class="bar">
   <div class="brand">STAI-6 session recorder</div>
-  <button class="ghost" id="dl">Download Excel</button>
+  <div class="tools">
+    <button class="ghost" id="dl">Download Excel</button>
+    <button class="ghost" id="out">Log out</button>
+  </div>
 </header>
 <main id="app"></main>
 
 <script>
 /* ========== 1. SETTINGS (edit these) ========== */
 // Paste your Google Apps Script web-app URL between the quotes (see steps). Leave "" to save on this device only.
-const SHEET_URL = "https://script.google.com/macros/s/AKfycbxPmYTvpuG3J0-khKRyWjH7bwKT5KTQyZpyZjU46njsPibXuI48SSN6RNnkAr2QFa0f/exec";
+const SHEET_URL = "";
 const GROUPS   = ["A - Music", "B - Control"];
-const SESSIONS = ["Week 0 (baseline)", "Week 1", "Week 2","Week 3","Week 4(Follow-up)","Other"];
+const SESSIONS = ["Week 0 (baseline)", "Week 6 (follow-up)", "Other"];
+const LOGIN_USER = "ADMIN", LOGIN_PASS = "admin@123"; // simple gate, change here
 
 /* ========== 2. STAI-6 CONTENT ========== */
 // rev = positive item, reverse scored (1=4, 2=3, 3=2, 4=1)
@@ -124,14 +130,44 @@ function downloadXlsx() {
   XLSX.writeFile(wb, `STAI6_data_${new Date().toISOString().slice(0, 10)}.xlsx`);
 }
 $("dl").onclick = downloadXlsx;
+const setChrome = on => { $("dl").hidden = $("out").hidden = !on; };
+$("out").onclick = () => {
+  if (["intro", "question"].includes(S.screen) && !confirm("Log out? The session in progress will be lost.")) return;
+  clearTimeout(S.timer);
+  try { sessionStorage.removeItem("stai_auth"); } catch {}
+  S = fresh(); viewLogin();
+};
 
 /* ========== 4. STATE ========== */
 const fresh = (g = GROUPS[0], s = SESSIONS[0]) => ({screen:"setup", pid:"", group:g, session:s, t:0, q:0, ans:Array(6).fill(null), rows:[], summary:null, timer:null});
 let S = fresh();
 
 /* ========== 5. SCREENS ========== */
+function viewLogin() {
+  S.screen = "login"; setChrome(false);
+  $app.innerHTML = `
+  <section class="card">
+    <h1>Researcher login</h1>
+    <p class="lead">Sign in to record a session.</p>
+    <form id="lf">
+      <label>Username<input id="u" required autocomplete="username"></label>
+      <label>Password<input id="p" type="password" required autocomplete="current-password"></label>
+      <p class="err" id="err" role="alert" hidden>Wrong username or password. Check both and try again.</p>
+      <button class="primary" type="submit">Log in</button>
+    </form>
+  </section>`;
+  $("u").focus();
+  $("lf").onsubmit = e => {
+    e.preventDefault();
+    if ($("u").value.trim().toUpperCase() === LOGIN_USER && $("p").value === LOGIN_PASS) {
+      try { sessionStorage.setItem("stai_auth", "1"); } catch {}
+      S = fresh(); viewSetup();
+    } else { $("err").hidden = false; $("p").value = ""; $("p").focus(); }
+  };
+}
+
 function viewSetup() {
-  S.screen = "setup";
+  S.screen = "setup"; setChrome(true);
   $app.innerHTML = `
   <section class="card">
     <h1>New participant</h1>
@@ -262,7 +298,9 @@ document.addEventListener("keydown", e => {
   else if (e.key === "ArrowLeft" || e.key === "Backspace") back();
 });
 
-viewSetup();
+let authed = false;
+try { authed = sessionStorage.getItem("stai_auth") === "1"; } catch {}
+authed ? viewSetup() : viewLogin();
 </script>
 </body>
 </html>
